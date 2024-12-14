@@ -18,10 +18,13 @@ class Game:
         self.current_tool = None
         self.robots = []
         self.tasks = []
+        self.moving_obstacles = []  # List of moving obstacles
         self.dynamic_tasks_enabled = True
         self.end_simulation = False
         self.start_time = None
         self.total_tasks_completed = 0
+        self.auction_interval = 2.0  # Auction every 2 seconds
+        self.last_auction_time = 0
         
         self.madql = MADQLAgent(self)
         self.astar = AStar(self)
@@ -173,21 +176,137 @@ class Game:
                 self.tasks.append(task)
                 self.add_status_message(f"Generated new task at ({x}, {y}) with priority {priority}")
 
+    def generate_moving_obstacle(self):
+        """Generate a moving obstacle with random direction"""
+        if len(self.moving_obstacles) < MAX_MOVING_OBSTACLES and random.random() < OBSTACLE_GEN_CHANCE:
+            # Find empty spot
+            empty_cells = [(x, y) for x in range(GRID_SIZE) for y in range(GRID_SIZE)
+                          if self.grid[y][x] == CellType.EMPTY]
+            if empty_cells:
+                x, y = random.choice(empty_cells)
+                direction = random.choice([(0,1), (1,0), (0,-1), (-1,0)])
+                self.moving_obstacles.append({
+                    'x': x, 'y': y,
+                    'dx': direction[0], 'dy': direction[1],
+                    'last_move': time.time()
+                })
+                self.grid[y][x] = CellType.OBSTACLE
+                self.add_status_message(f"Added moving obstacle at ({x}, {y})")
+
+    def update_moving_obstacles(self, current_time):
+        """Update positions of moving obstacles"""
+        for obstacle in self.moving_obstacles[:]:
+            if current_time - obstacle['last_move'] < OBSTACLE_MOVE_DELAY:
+                continue
+
+            # Calculate new position
+            new_x = obstacle['x'] + obstacle['dx']
+            new_y = obstacle['y'] + obstacle['dy']
+
+            # Check if new position is valid
+            if (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE and 
+                self.grid[new_y][new_x] == CellType.EMPTY):
+                # Update grid
+                self.grid[obstacle['y']][obstacle['x']] = CellType.EMPTY
+                self.grid[new_y][new_x] = CellType.OBSTACLE
+                obstacle['x'] = new_x
+                obstacle['y'] = new_y
+                obstacle['last_move'] = current_time
+            else:
+                # Change direction if blocked
+                obstacle['dx'], obstacle['dy'] = random.choice([(0,1), (1,0), (0,-1), (-1,0)])
+
+    def auction_tasks(self):
+        """Market-based task allocation using auction mechanism"""
+        if not self.tasks:
+            return
+
+        current_time = time.time()
+        if current_time - self.last_auction_time < self.auction_interval:
+            return
+
+        self.last_auction_time = current_time
+        unassigned_robots = [robot for robot in self.robots if not robot.target]
+        if not unassigned_robots:
+            return
+
+        # Calculate bids for each robot-task pair
+        bids = []
+        for robot in unassigned_robots:
+            robot_state = self.madql.get_state(robot)
+            for task in self.tasks:
+                # Base bid on Q-value
+                q_value = robot.q_table[robot_state].get(task, 0)
+                
+                # Adjust bid based on various factors
+                distance = robot.manhattan_distance((robot.x, robot.y), task.get_position())
+                path = self.astar.find_path((robot.x, robot.y), task.get_position())
+                
+                # Calculate path congestion
+                congestion = 0
+                if path:
+                    for px, py in path:
+                        for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
+                            check_x, check_y = px + dx, py + dy
+                            if 0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE:
+                                if self.grid[check_y][check_x] in [CellType.ROBOT, CellType.OBSTACLE]:
+                                    congestion += 1
+
+                # Calculate bid value
+                bid_value = (
+                    q_value * 2 +                    # Learning component
+                    task.priority * 30 +             # Priority bonus
+                    (1.0 - distance/GRID_SIZE) * 20 + # Distance factor
+                    (1.0 - congestion/len(path) if path else 0) * 10 + # Congestion factor
+                    task.get_waiting_time() * 5      # Waiting time bonus
+                )
+                
+                bids.append((robot, task, bid_value))
+
+        # Sort bids by value
+        bids.sort(key=lambda x: x[2], reverse=True)
+
+        # Assign tasks to highest bidders
+        assigned_tasks = set()
+        assigned_robots = set()
+
+        for robot, task, bid_value in bids:
+            if (robot not in assigned_robots and 
+                task not in assigned_tasks and 
+                task in self.tasks):  # Check if task still available
+                
+                # Assign task
+                self.grid[task.y][task.x] = CellType.TARGET
+                robot.set_target(task)
+                self.tasks.remove(task)
+                assigned_tasks.add(task)
+                assigned_robots.add(robot)
+                
+                self.add_status_message(
+                    f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.1f}"
+                )
+
     def update_simulation(self):
         if not self.simulation_running:
             return
             
         current_time = time.time()
         
-        # Generate new tasks if enabled
+        # Update dynamic environment
         if self.dynamic_tasks_enabled:
             self.generate_random_task()
+            self.generate_moving_obstacle()
+        
+        self.update_moving_obstacles(current_time)
         
         # Update waiting times for all robots
         for robot in self.robots:
             robot.update_waiting(robot.waiting, current_time)
             
-        # Assign available tasks using MADQL
+        # Run auction-based task allocation
+        self.auction_tasks()
+        
+        # Also use MADQL for learning and improvement
         self.assign_tasks()
             
         # First, reset waiting status for all robots at the start of each update

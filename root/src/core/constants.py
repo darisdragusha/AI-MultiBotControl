@@ -25,4 +25,9 @@ EPSILON = 0.1
 # Simulation Parameters
 MOVE_DELAY = 0.5  # seconds between moves
 TASK_GEN_CHANCE = 0.05  # 5% chance per update to generate a new task
-MAX_TASKS = 5 
+MAX_TASKS = 5
+
+# Moving Obstacles Parameters
+MAX_MOVING_OBSTACLES = 3  # Maximum number of moving obstacles
+OBSTACLE_GEN_CHANCE = 0.02  # 2% chance per update to generate a new obstacle
+OBSTACLE_MOVE_DELAY = 1.0  # seconds between obstacle movements
