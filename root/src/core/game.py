@@ -2,7 +2,7 @@ import pygame
 import random
 import time
 from src.core.constants import *
-from src.core.entities import Robot, CellType
+from src.core.entities import Robot, CellType, Task
 from src.agents.madql_agent import MADQLAgent
 from src.agents.astar import AStar
 from src.ui.button import Button
@@ -95,64 +95,69 @@ class Game:
                     self.grid[grid_y][grid_x] = CellType.OBSTACLE
             elif self.current_tool == 'task':
                 if self.grid[grid_y][grid_x] == CellType.EMPTY:
+                    # Create task with random priority
+                    priority = random.choices([1, 2, 3], weights=[0.5, 0.3, 0.2])[0]
+                    new_task = Task(grid_x, grid_y, priority)
                     self.grid[grid_y][grid_x] = CellType.TASK
-                    self.tasks.append((grid_x, grid_y))
+                    self.tasks.append(new_task)
+                    self.add_status_message(f"Created P{priority} task at ({grid_x}, {grid_y})")
                     if self.simulation_running:
-                        self.assign_tasks()  # Try to assign new task immediately
+                        self.assign_tasks()
 
     def reallocate_all_tasks(self):
         """Reallocate all tasks among all robots for optimal distribution"""
         # Clear all current assignments
         for robot in self.robots:
             if robot.target:
-                target_pos = robot.target
-                self.tasks.append(target_pos)
-                self.grid[target_pos[1]][target_pos[0]] = CellType.TASK
+                target = robot.target
+                # Create a new task with the same priority
+                new_task = Task(target.x, target.y, target.priority)
+                self.tasks.append(new_task)
+                self.grid[target.y][target.x] = CellType.TASK
             robot.target = None
             robot.path = []
         
         # Create a list of all tasks (both assigned and unassigned)
-        all_tasks = [(x, y) for x in range(GRID_SIZE) for y in range(GRID_SIZE)
-                    if self.grid[y][x] in [CellType.TASK, CellType.TARGET]]
-        
-        # Clear task assignments from grid
-        for x, y in all_tasks:
-            self.grid[y][x] = CellType.TASK
+        all_tasks = []
+        for x in range(GRID_SIZE):
+            for y in range(GRID_SIZE):
+                if self.grid[y][x] in [CellType.TASK, CellType.TARGET]:
+                    # For existing tasks without priority info, assign random priority
+                    priority = random.choices([1, 2, 3], weights=[0.5, 0.3, 0.2])[0]
+                    new_task = Task(x, y, priority)
+                    all_tasks.append(new_task)
+                    self.grid[y][x] = CellType.TASK
         
         self.tasks = all_tasks
         self.add_status_message("Reallocating all tasks for optimal distribution")
         self.assign_tasks()
 
     def assign_tasks(self):
-        """Assign tasks to robots using a greedy approach based on distance"""
+        """Assign tasks to robots using MADQL"""
         unassigned_robots = [robot for robot in self.robots if not robot.target]
-        available_tasks = [(x, y) for x, y in self.tasks if self.grid[y][x] == CellType.TASK]
         
-        # Create a list of (robot, task, distance) tuples for all possible combinations
-        assignments = []
         for robot in unassigned_robots:
-            for task in available_tasks:
-                distance = robot.manhattan_distance((robot.x, robot.y), task)
-                assignments.append((robot, task, distance))
-        
-        # Sort assignments by distance
-        assignments.sort(key=lambda x: x[2])
-        
-        # Assign tasks greedily
-        assigned_tasks = set()
-        assigned_robots = set()
-        
-        for robot, task, distance in assignments:
-            if (robot not in assigned_robots and 
-                task not in assigned_tasks and 
-                self.grid[task[1]][task[0]] == CellType.TASK):
-                robot.set_target(*task)
-                self.tasks.remove(task)
-                self.grid[task[1]][task[0]] = CellType.TARGET
-                assigned_tasks.add(task)
-                assigned_robots.add(robot)
+            # Get current state
+            old_state = self.madql.get_state(robot)
+            
+            # Choose task using MADQL
+            chosen_task = self.madql.choose_action(robot)
+            
+            if chosen_task:
+                # Mark task as assigned
+                self.grid[chosen_task.y][chosen_task.x] = CellType.TARGET
+                robot.set_target(chosen_task)
+                self.tasks.remove(chosen_task)
+                
+                # Get new state and reward
+                new_state = self.madql.get_state(robot)
+                reward = self.madql.get_reward(robot, old_state, chosen_task, new_state)
+                
+                # Update Q-values
+                self.madql.update(robot, old_state, chosen_task, reward, new_state)
+                
                 self.add_status_message(
-                    f"Robot {robot.id} assigned to task at {task} (distance: {distance})"
+                    f"Robot {robot.id} assigned to P{chosen_task.priority} task at ({chosen_task.x}, {chosen_task.y}) [R: {reward:.1f}]"
                 )
 
     def generate_random_task(self):
@@ -161,8 +166,12 @@ class Game:
                           if self.grid[y][x] == CellType.EMPTY]
             if empty_cells:
                 x, y = random.choice(empty_cells)
+                # Assign random priority with weighted probability
+                priority = random.choices([1, 2, 3], weights=[0.5, 0.3, 0.2])[0]
+                task = Task(x, y, priority)
                 self.grid[y][x] = CellType.TASK
-                self.tasks.append((x, y))
+                self.tasks.append(task)
+                self.add_status_message(f"Generated new task at ({x}, {y}) with priority {priority}")
 
     def update_simulation(self):
         if not self.simulation_running:
@@ -174,18 +183,30 @@ class Game:
         if self.dynamic_tasks_enabled:
             self.generate_random_task()
         
-        # Assign available tasks
+        # Update waiting times for all robots
+        for robot in self.robots:
+            robot.update_waiting(robot.waiting, current_time)
+            
+        # Assign available tasks using MADQL
         self.assign_tasks()
             
         # First, reset waiting status for all robots at the start of each update
         for robot in self.robots:
             robot.waiting = False
             
-        # Sort robots by distance to target to prioritize movement
+        # Sort robots by priority of their tasks and waiting time
         active_robots = [r for r in self.robots if r.target]
-        active_robots.sort(key=lambda r: r.manhattan_distance((r.x, r.y), r.target) if r.target else float('inf'))
+        active_robots.sort(key=lambda r: (
+            r.target.priority if r.target else 0,
+            -r.waiting_time,  # Negative so longer waiting time gets priority
+            r.manhattan_distance((r.x, r.y), r.target.get_position()) if r.target else float('inf')
+        ), reverse=True)
             
-        for robot in active_robots:
+        # Process all robots, not just active ones
+        for robot in self.robots:
+            if current_time - robot.last_move_time < MOVE_DELAY:
+                continue  # Skip if not enough time has passed since last move
+                
             # Check if path is still valid
             if robot.path:
                 path_invalid = False
@@ -199,22 +220,25 @@ class Game:
 
             if not robot.path:
                 if robot.target:
-                    robot.path = self.astar.find_path((robot.x, robot.y), robot.target)
+                    robot.path = self.astar.find_path(
+                        (robot.x, robot.y),
+                        robot.target.get_position()
+                    )
                     if robot.path:
                         path_length = len(robot.path)
                         self.add_status_message(
-                            f"Robot {robot.id}: Found path to target, length {path_length}"
+                            f"Robot {robot.id}: Found path to P{robot.target.priority} task, length {path_length}"
                         )
                     else:
                         self.add_status_message(
-                            f"Robot {robot.id}: No path found to target"
+                            f"Robot {robot.id}: No path to P{robot.target.priority} task"
                         )
                         # If no path found, clear target and try another task
                         robot.target = None
                         continue
                     robot.path.pop(0)  # Remove current position
-            
-            if robot.path and (current_time - robot.last_move_time) >= MOVE_DELAY:
+
+            if robot.path:
                 next_pos = robot.path[0]
                 
                 # Check for collision
@@ -230,24 +254,31 @@ class Game:
                         # Check if other robot is planning to move to our next position
                         elif (other_robot.path and 
                               other_robot.path[0] == next_pos):
-                            # If both robots are moving towards each other, use priorities
-                            if (len(robot.path) > 1 and len(other_robot.path) > 1 and
-                                robot.path[1] == (other_robot.x, other_robot.y) and
-                                other_robot.path[1] == (robot.x, robot.y)):
-                                # Let robot with lower ID wait
-                                if robot.id > other_robot.id:
+                            # Consider task priorities in collision resolution
+                            if robot.target and other_robot.target:
+                                if robot.target.priority < other_robot.target.priority:
                                     collision = True
                                     colliding_robot = other_robot
                                     break
-                            # Otherwise, let robot closer to target proceed
-                            elif (other_robot.target and
-                                  other_robot.manhattan_distance((other_robot.x, other_robot.y), other_robot.target) < 
-                                  robot.manhattan_distance((robot.x, robot.y), robot.target)):
-                                collision = True
-                                colliding_robot = other_robot
-                                break
-                
+                                elif robot.target.priority == other_robot.target.priority:
+                                    # If same priority, consider waiting time and distance
+                                    if robot.waiting_time < other_robot.waiting_time:
+                                        collision = True
+                                        colliding_robot = other_robot
+                                        break
+                                    elif robot.waiting_time == other_robot.waiting_time:
+                                        # If same waiting time, let robot closer to target proceed
+                                        if (other_robot.target and
+                                            other_robot.manhattan_distance((other_robot.x, other_robot.y), other_robot.target.get_position()) < 
+                                            robot.manhattan_distance((robot.x, robot.y), robot.target.get_position())):
+                                            collision = True
+                                            colliding_robot = other_robot
+                                            break
+
                 if not collision:
+                    # Get old state before moving
+                    old_state = self.madql.get_state(robot)
+                    
                     # Update grid and robot position
                     self.grid[robot.y][robot.x] = CellType.EMPTY
                     old_pos = (robot.x, robot.y)
@@ -258,13 +289,19 @@ class Game:
                     robot.total_distance += 1
                     robot.waiting = False
                     
+                    # Get new state and update Q-values
+                    new_state = self.madql.get_state(robot)
+                    reward = self.madql.get_reward(robot, old_state, next_pos, new_state)
+                    self.madql.update(robot, old_state, next_pos, reward, new_state)
+                    
                     # Check if reached target
-                    if (robot.x, robot.y) == robot.target:
+                    if robot.target and (robot.x, robot.y) == robot.target.get_position():
+                        completed_priority = robot.target.priority
                         robot.target = None
                         robot.completed_tasks += 1
                         self.total_tasks_completed += 1
                         self.add_status_message(
-                            f"Robot {robot.id}: Completed task! Total: {robot.completed_tasks}"
+                            f"Robot {robot.id}: Completed P{completed_priority} task! Total: {robot.completed_tasks}"
                         )
                 else:
                     robot.waiting = True
@@ -272,25 +309,22 @@ class Game:
                         # If both robots are waiting too long, force one to find alternative path
                         if (robot.waiting and colliding_robot.waiting and 
                             current_time - robot.last_move_time > MOVE_DELAY * 3):
-                            robot.path = []  # Force path recalculation
-                            self.add_status_message(
-                                f"Robot {robot.id}: Finding alternative path to avoid deadlock"
-                            )
+                            # Robot with lower priority task should find alternative
+                            if (robot.target and colliding_robot.target and 
+                                robot.target.priority <= colliding_robot.target.priority):
+                                robot.path = []  # Force path recalculation
+                                self.add_status_message(
+                                    f"Robot {robot.id}: Finding alternative path (lower priority)"
+                                )
+                            elif robot.waiting_time > colliding_robot.waiting_time:
+                                robot.path = []  # Force path recalculation
+                                self.add_status_message(
+                                    f"Robot {robot.id}: Finding alternative path (waited longer)"
+                                )
                         else:
                             self.add_status_message(
                                 f"Robot {robot.id}: Waiting for Robot {colliding_robot.id} to move"
                             )
-                    
-                # MADQL update
-                state = self.madql.get_state(robot)
-                action = (next_pos[0] - robot.x, next_pos[1] - robot.y)
-                reward = self.madql.get_reward(robot, action, next_pos)
-                if reward != 0:  # Only show significant rewards
-                    self.add_status_message(
-                        f"Robot {robot.id}: Action reward: {reward}"
-                    )
-                new_state = self.madql.get_state(robot)
-                self.madql.update(robot, state, action, reward, new_state)
         
         # Check if simulation should end
         if self.end_simulation and not any(robot.target for robot in self.robots):
