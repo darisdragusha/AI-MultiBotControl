@@ -1,174 +1,200 @@
-import pygame
 import pickle
-import random
+import random 
 import numpy as np
 
-# Constants
-GRID_SIZE = 10  # Size of the grid (10x10)
-BLOCK_SIZE = 40  # Size of each block in the grid
-NUM_ROBOTS = 3  # Number of robots
+# Assuming the Robot and Environment classes are already defined as per your previous code
+# Define the Environment Class
+class Environment:
+    def __init__(self, grid_size=10, num_robots=2):
+        self.grid_size = grid_size
+        self.num_robots = num_robots
+        self.robots = []
+        self.robot_paths = []  # Predefined paths
+        self.initialize_robots()
+
+    def initialize_robots(self):
+        """Initialize robots with random start positions and predefined paths."""
+        for i in range(self.num_robots):
+            path = self.generate_random_path()
+            self.robot_paths.append(path)
+            self.robots.append(Robot(path, i + 1))  # Assign priority based on index
+
+    def generate_random_path(self):
+        """Generate a realistic random path for robots."""
+        start = (random.randint(0, self.grid_size - 1), random.randint(0, self.grid_size - 1))
+        path = [start]
+        for _ in range(random.randint(5, 10)):  # Path length of 5-10 steps
+            next_pos = (max(0, min(self.grid_size - 1, path[-1][0] + random.choice([-1, 0, 1]))),
+                        max(0, min(self.grid_size - 1, path[-1][1] + random.choice([-1, 0, 1]))))
+            path.append(next_pos)
+        
+        return path
+
+    def get_state(self):
+        """Represent the state as a tuple of robot positions, priorities, and next steps."""
+        state = []
+        for robot in self.robots:
+            current_position = robot.get_current_position()
+            priority = robot.priority
+            next_position = robot.get_next_position()  # Next step
+            state.append((current_position, priority, next_position))
+        return tuple(state)  # Use a tuple to make the state hashable
+
+    def check_collisions(self):
+        """Check if robots have collided at the current step."""
+        current_positions = {}
+        collisions = []
+
+        for i, robot in enumerate(self.robots):
+            current_pos = robot.get_current_position()
+            
+            if current_pos in current_positions:
+                # Record collision between robots
+                collisions.append((i, current_positions[current_pos]))
+            else:
+                current_positions[current_pos] = i  # Mark this position as occupied
+
+        return collisions
+
+    def step(self, actions):
+        """Take a step in the environment based on robot actions."""
+        for i, action in enumerate(actions):
+            if action == 0:  # Move
+                self.robots[i].move()
+            elif action == 1:  # Wait
+                pass  # Robot remains in place
+
+        collisions = self.check_collisions()
+        state = self.get_state()
+        return state, collisions
 
 
-# Robot class to manage the state
+# Define the Robot Class
 class Robot:
-    def __init__(self, id, path, priority, color):
-        self.id = id  # Robot's ID
-        self.path = path  # The robot's path (list of positions)
-        self.current_step = 0  # Current step on the path
-        self.priority = priority  # Priority (higher value means higher priority)
-        self.color = color  # Color for visualization
-        self.action = None  # Action for this robot at any given state
+    def __init__(self, path, priority):
+        self.path = path
+        self.current_step = 0
+        self.priority = priority
 
-    def get_next_action(self, state, q_table):
-        """Get the next action based on the Q-table."""
-        # Extract the Q-values for the current state
-        state_q_values = q_table[state]
+    def get_current_position(self):
+        """Get the robot's current position."""
+        return self.path[self.current_step]
 
-        # Return the action with the highest Q-value (0: move, 1: wait)
-        return np.argmax(state_q_values)
+    def has_next_step(self):
+        """Check if the robot has a next step."""
+        return self.current_step + 1 < len(self.path)
+
+    def get_next_position(self):
+        """Get the robot's next position."""
+        if self.has_next_step():
+            return self.path[self.current_step + 1]
+        else:
+            return self.path[self.current_step]  # No next position, return the current one
 
     def move(self):
-        """Move the robot along its predefined path."""
-        if self.current_step + 1 < len(self.path):
+        """Move the robot to the next step."""
+        if self.has_next_step():
             self.current_step += 1
 
 
-# Function to check for collisions (if two robots will collide)
-def check_collisions(robots):
-    """Check if any two robots' next step positions will collide."""
-    next_positions = {}
-    collisions = []
+# Define the Q-learning Model
+class QLearningModel:
+    def __init__(self, num_actions=2, learning_rate=0.1, discount_factor=0.9, epsilon=0.1):
+        self.num_actions = num_actions  # Move or Wait
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.epsilon = epsilon  # Exploration rate
+        self.q_table = {}  # Use a sparse dictionary for the Q-table
 
-    for i, robot in enumerate(robots):
-        # Get the next position of the robot
-        if robot.current_step + 1 < len(robot.path):
-            next_pos = robot.path[robot.current_step + 1]
+    def choose_action(self, state_index):
+        """Epsilon-greedy action selection with exploration decay."""
+        if random.uniform(0, 1) < self.epsilon:  # Exploration
+            return random.choice([0, 1])  # Randomly choose between moving or waiting
+        else:  # Exploitation
+            state_q_values = self.q_table.get(state_index, [0, 0])  # Default to [0, 0] if state not encountered
+            return np.argmax(state_q_values)  # Exploit the best action
 
-            if next_pos in next_positions:
-                # If two robots have the same next position, it's a collision
-                collisions.append((i, next_positions[next_pos]))
+    def update_q_table(self, state_index, action, reward, next_state_index):
+        """Update the Q-table using the Q-learning formula."""
+        best_next_action = np.max(self.q_table.get(next_state_index, [0, 0]))  # Default to [0, 0] if state not encountered
+        if state_index not in self.q_table:
+            self.q_table[state_index] = [0, 0]  # Initialize the Q-values for the state
+        self.q_table[state_index][action] += self.learning_rate * (
+            reward + self.discount_factor * best_next_action - self.q_table[state_index][action]
+        )
 
-            # Store the next position of the robot
-            next_positions[next_pos] = i
+    def save_q_table(self, filename="q_table.pkl"):
+        """Save the Q-table to a file."""
+        with open(filename, 'wb') as f:
+            pickle.dump(self.q_table, f)
 
-    return collisions
-
-
-# Function to move a robot (handle collisions by priority)
-def move_robot(robots, robot_idx, collisions):
-    """Move the robot based on collision status and priority."""
-    for robot1, robot2 in collisions:
-        if robots[robot_idx].path[robots[robot_idx].current_step + 1] == robots[robot2].path[
-            robots[robot2].current_step + 1]:
-            # If the next position of both robots is the same, prioritize based on priority
-            if robots[robot_idx].priority > robots[robot2].priority:
-                robots[robot_idx].current_step += 1  # Move the robot
-                return True
-            else:
-                # Lower priority robot will not move
-                return False
-
-    # If no collision, just move the robot
-    if robots[robot_idx].current_step + 1 < len(robots[robot_idx].path):
-        robots[robot_idx].current_step += 1
-        return True
-    return False
+    def load_q_table(self, filename="q_table.pkl"):
+        """Load the Q-table from a file."""
+        with open(filename, 'rb') as f:
+            self.q_table = pickle.load(f)
 
 
-# Function to visualize the robots and their movement in Pygame
-def visualize(robots, screen):
-    screen.fill((255, 255, 255))  # Clear the screen with white background
+def test_model():
+    # Load the Q-table using pickle
+    with open("q_table.pkl", "rb") as file:
+        q_table = pickle.load(file)
 
-    # Draw the grid
-    for row in range(GRID_SIZE):
-        for col in range(GRID_SIZE):
-            pygame.draw.rect(screen, (200, 200, 200),
-                             (col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 1)
-
-    # Draw robots' paths and current positions
-    for robot in robots:
-        for i in range(1, robot.current_step + 1):
-            start_pos = robot.path[i - 1]
-            end_pos = robot.path[i]
-            pygame.draw.line(screen, robot.color,
-                             (start_pos[0] * BLOCK_SIZE + BLOCK_SIZE // 2, start_pos[1] * BLOCK_SIZE + BLOCK_SIZE // 2),
-                             (end_pos[0] * BLOCK_SIZE + BLOCK_SIZE // 2, end_pos[1] * BLOCK_SIZE + BLOCK_SIZE // 2),
-                             3)
-
-        # Draw current robot position
-        if robot.current_step < len(robot.path):
-            current_pos = robot.path[robot.current_step]
-            pygame.draw.circle(screen, robot.color,
-                               (current_pos[0] * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                current_pos[1] * BLOCK_SIZE + BLOCK_SIZE // 2),
-                               BLOCK_SIZE // 2)
-
-    pygame.display.flip()  # Update the display
-
-
-# Main program
-def main():
-    pygame.init()
-
-    # Load the shared Q-table (this file should be created after training)
-    with open("q_table.pkl", "rb") as f:
-        q_table = pickle.load(f)
-
-    # Robot paths (predefined, with more intertwined paths and robots starting in different positions)
+    # Initialize the QLearning model with the loaded Q-table
+    model = QLearningModel(num_actions=2)  # Ensure the number of actions matches
+    model.q_table = q_table  # Assign the loaded Q-table to the model
+    
+    # Define the robots and paths as specified
     robots = [
-        Robot(id=1, path=[(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 1), (7, 1), (8, 2), (9, 2)], priority=3,
-              color=(255, 0, 0)),
-        # Red robot moves vertically, then across, and intersects with other robots at each step
-        Robot(id=2, path=[(0, 9), (1, 9), (2, 9), (3, 8), (4, 8), (5, 8), (6, 7), (7, 7), (8, 6), (9, 6)], priority=1,
-              color=(0, 255, 0)),
-        # Green robot moves vertically, then across, and intersects with other robots at each step
-        Robot(id=3, path=[(9, 0), (8, 0), (7, 0), (6, 0), (5, 1), (4, 1), (3, 2), (2, 2), (1, 3), (0, 3)], priority=2,
-              color=(0, 0, 255))
-        # Blue robot moves vertically, then across, and intersects with other robots at each step
+        Robot(path=[(0, 4), (0, 3), (0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (6, 3), (6, 4)],
+              priority=3),
+        Robot(path=[(7, 5), (7, 4), (7, 3), (7, 2), (7, 1), (6, 1), (5, 1), (5, 2), (5, 3), (5, 4)],
+              priority=1),
+        Robot(path=[(0, 0), (1, 0), (1, 1), (2, 1), (2, 2), (3, 2), (3, 3), (4, 3), (4, 4), (4, 5), (5, 5)],
+              priority=2)
     ]
+    
+    # Initialize the environment with the robots
+    environment = Environment(grid_size=10, num_robots=len(robots))
+    environment.robots = robots
 
-    # Initialize Pygame window
-    screen = pygame.display.set_mode((GRID_SIZE * BLOCK_SIZE, GRID_SIZE * BLOCK_SIZE))
-    pygame.display.set_caption("Robot Collision Avoidance")
+    # Map states to indices dynamically
+    state_to_index = {}
+    index_counter = 0
 
-    # Main loop
-    running = True
-    clock = pygame.time.Clock()
+    def get_state_index(state):
+        nonlocal index_counter
+        if state not in state_to_index:
+            state_to_index[state] = index_counter
+            index_counter += 1
+        return state_to_index[state]
+    
+    # Run the test for each step
+    for step in range(min(len(robot.path) for robot in robots)):  # Step limit based on shortest path
+        # Get the current state (robot positions, priorities, and next steps)
+        state = environment.get_state()
+        state_index = get_state_index(state)
+        
+        # Choose actions for each robot based on the current state
+        actions = [model.choose_action(state_index) for _ in environment.robots]
+        
+        # Print the actions taken by each robot
+        print(f"Step {step + 1}:")
+        for i, robot in enumerate(environment.robots):
+            action = actions[i]
+            action_str = "Move" if action == 0 else "Wait"
+            print(f"  Robot {robot.priority} (Priority {robot.priority}): {action_str}")
 
-    for step in range(50):  # Run for 50 steps for this example
-        collisions = check_collisions(robots)
+        # Update the environment by performing the chosen actions
+        next_state, collisions = environment.step(actions)
+        print(next_state)
+        print(f"Collisions at this step: {collisions}")
 
-        # Move robots according to collision avoidance strategy
-        for i in range(NUM_ROBOTS):
-            robot = robots[i]
-            # Get the robot's current state (position)
-            state = robot.path[robot.current_step]
+        # Optionally, you can track robot positions at each step
+        for i, robot in enumerate(environment.robots):
+            print(f"  Robot {robot.priority} position: {robot.get_current_position()}")
 
-            # Ensure state is an integer index, mapped to a state (you could map position to a state index)
-            state_index = int(state[0] * GRID_SIZE + state[1])  # Convert (x, y) position to a unique state index
+    print("Testing completed.")
 
-            # Get the action for this robot based on Q-table
-            action = robot.get_next_action(state_index, q_table)
-
-            # Set action (move or wait) and move the robot accordingly
-            robot.action = 'move' if action == 0 else 'wait'
-
-            # Move the robot
-            move_robot(robots, i, collisions)
-
-        # Handle Pygame events (e.g., closing the window)
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-        # Visualize the robots and paths
-        visualize(robots, screen)
-
-        # Slow down the loop for better visualization
-        clock.tick(2)  # 2 frames per second
-
-    pygame.quit()
-
-
+# Run the test model
 if __name__ == "__main__":
-    main()
+    test_model()

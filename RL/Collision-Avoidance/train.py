@@ -15,10 +15,8 @@ class Environment:
         """Initialize robots with random start positions and predefined paths."""
         for i in range(self.num_robots):
             path = self.generate_random_path()
-            
             self.robot_paths.append(path)
             self.robots.append(Robot(path, i + 1))  # Assign priority based on index
-        
 
     def generate_random_path(self):
         """Generate a realistic random path for robots."""
@@ -30,14 +28,16 @@ class Environment:
             path.append(next_pos)
         
         return path
-    
 
     def get_state(self):
-        """Represent the state as a tuple of robot positions."""
-        positions = tuple(robot.get_current_position() for robot in self.robots)
-        
-        return positions
-
+        """Represent the state as a tuple of robot positions, priorities, and next steps."""
+        state = []
+        for robot in self.robots:
+            position = robot.get_current_position()
+            priority = robot.priority
+            next_step = robot.get_next_position() if robot.has_next_step() else None
+            state.append((position, priority, next_step))
+        return tuple(state)
 
     def check_collisions(self):
         """Check if robots have collided at the current step."""
@@ -80,6 +80,12 @@ class Robot:
         """Get the robot's current position."""
         return self.path[self.current_step]
 
+    def get_next_position(self):
+        """Get the robot's next position."""
+        if self.has_next_step():
+            return self.path[self.current_step + 1]
+        return None
+
     def has_next_step(self):
         """Check if the robot has a next step."""
         return self.current_step + 1 < len(self.path)
@@ -88,33 +94,33 @@ class Robot:
         """Move the robot to the next step."""
         if self.has_next_step():
             self.current_step += 1
-            
 
 
 # Define the Q-learning Model
 class QLearningModel:
-    def __init__(self, num_actions=2, num_states=1000, learning_rate=0.1, discount_factor=0.9, epsilon=0.1):
+    def __init__(self, num_actions=2, learning_rate=0.1, discount_factor=0.9, epsilon=0.1):
         self.num_actions = num_actions  # Move or Wait
-        self.num_states = num_states  # State space (can vary based on complexity)
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
         self.epsilon = epsilon  # Exploration rate
-        self.q_table = np.zeros((num_states, num_actions))
+        self.q_table = {}  # Use a sparse dictionary for the Q-table
 
     def choose_action(self, state_index):
         """Epsilon-greedy action selection with exploration decay."""
         if random.uniform(0, 1) < self.epsilon:  # Exploration
             return random.choice([0, 1])  # Randomly choose between moving or waiting
         else:  # Exploitation
-            return np.argmax(self.q_table[state_index])  # Exploit the best action
+            state_q_values = self.q_table.get(state_index, [0, 0])  # Default to [0, 0] if state not encountered
+            return np.argmax(state_q_values)  # Exploit the best action
 
     def update_q_table(self, state_index, action, reward, next_state_index):
         """Update the Q-table using the Q-learning formula."""
-        best_next_action = np.max(self.q_table[next_state_index])
+        best_next_action = np.max(self.q_table.get(next_state_index, [0, 0]))  # Default to [0, 0] if state not encountered
+        if state_index not in self.q_table:
+            self.q_table[state_index] = [0, 0]  # Initialize the Q-values for the state
         self.q_table[state_index][action] += self.learning_rate * (
             reward + self.discount_factor * best_next_action - self.q_table[state_index][action]
         )
-        
 
     def save_q_table(self, filename="q_table.pkl"):
         """Save the Q-table to a file."""
@@ -127,13 +133,14 @@ class QLearningModel:
             self.q_table = pickle.load(f)
 
 
+# Train the model
 def train(episodes):
-    
     state_to_index = {}  # Mapping from states to indices
     index_counter = 0
 
     def get_state_index(state):
         nonlocal index_counter
+        # Use a hashable tuple (positions, priorities, next positions) to create a unique state index
         if state not in state_to_index:
             state_to_index[state] = index_counter
             index_counter += 1
@@ -141,7 +148,7 @@ def train(episodes):
 
     for episode in range(episodes):
         environment = Environment(grid_size=10, num_robots=3)
-        model = QLearningModel(num_actions=2, num_states=1000)
+        model = QLearningModel(num_actions=2)
         state = environment.get_state()
         state_index = get_state_index(state)
         total_reward = 0
@@ -149,7 +156,7 @@ def train(episodes):
         # Decay epsilon over time to encourage more exploitation
         model.epsilon = max(0.01, model.epsilon * 0.995)  # Decay epsilon to a minimum of 0.01
 
-        for step in range(10):  # Limit to 100 steps per episode
+        for step in range(10):  # Limit to 10 steps per episode
             # Choose actions for each robot based on the current state
             actions = [model.choose_action(state_index) for _ in environment.robots]
             
@@ -180,17 +187,13 @@ def train(episodes):
 
         # Optionally print the reward for each episode
         print(f"Episode {episode + 1}: Total reward = {total_reward}")
-        
-
 
     model.save_q_table("q_table.pkl")  # Save trained Q-table after training
 
 
-
 # Main function for Training
 def main_train():
-    
-    train(episodes=100)
+    train(episodes=10000)
 
 
 # Run the training phase
