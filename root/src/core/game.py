@@ -540,19 +540,23 @@ class Game:
         if self.simulation_running or self.performance_metrics:
             font = pygame.font.Font(None, 24)
             y_offset = GRID_SIZE * CELL_SIZE + 10  # Adjust for new grid size
-            
+
             # Draw status panel background for logs
             status_panel = pygame.Rect(10, GRID_SIZE * CELL_SIZE, TOTAL_WIDTH - 20, LOG_HEIGHT - 10)
-            pygame.draw.rect(self.screen, (240, 240, 240), status_panel)
-            pygame.draw.rect(self.screen, BLACK, status_panel, 2)
-            
+            pygame.draw.rect(self.screen, (240, 240, 240), status_panel, border_radius=10)
+            pygame.draw.rect(self.screen, BLACK, status_panel, 2, border_radius=10)
+
+            # Add shadow effect
+            shadow_panel = pygame.Rect(12, GRID_SIZE * CELL_SIZE + 2, TOTAL_WIDTH - 20, LOG_HEIGHT - 10)
+            pygame.draw.rect(self.screen, (200, 200, 200), shadow_panel, border_radius=10)
+
             # Draw title
             title = font.render("Status Log:", True, BLACK)
             self.screen.blit(title, (20, y_offset + 10))
-            
+
             # Start logs below the title
             y_offset += 35
-            
+
             # Draw messages within log area
             for message in self.status_messages[-self.max_messages:]:
                 words = message.split()
@@ -564,11 +568,11 @@ class Game:
                         text_surface = font.render(' '.join(line), True, BLACK)
                         self.screen.blit(text_surface, (20, y_offset))
                         y_offset += 20
-                        
+
                         # Stop drawing if log exceeds the panel height
                         if y_offset > GRID_SIZE * CELL_SIZE + LOG_HEIGHT - 20:
                             break
-                        
+
                         line = [word]
                 text_surface = font.render(' '.join(line), True, BLACK)
                 self.screen.blit(text_surface, (20, y_offset))
