@@ -489,10 +489,7 @@ class Game:
                 pygame.draw.rect(self.screen, BLACK, rect, 1)
                 
                 if self.grid[y][x] == CellType.ROBOT:
-                    pygame.draw.circle(self.screen, BLUE, 
-                                    (x * CELL_SIZE + CELL_SIZE//2, 
-                                     y * CELL_SIZE + CELL_SIZE//2), 
-                                    CELL_SIZE//3)
+                    self.screen.blit(robot_image, (x * CELL_SIZE, y * CELL_SIZE))
                 elif self.grid[y][x] == CellType.OBSTACLE:
                     pygame.draw.rect(self.screen, RED, 
                                    (x * CELL_SIZE + 5, y * CELL_SIZE + 5, 
