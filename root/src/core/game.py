@@ -536,7 +536,7 @@ class Game:
                 self.screen.blit(text_surface, (WINDOW_SIZE + 20, y_offset))
                 y_offset += 25
         
-        # Draw status messages at the bottom horizontally
+        # Draw status messages at the bottom
         if self.simulation_running or self.performance_metrics:
             font = pygame.font.Font(None, 24)
             y_offset = GRID_SIZE * CELL_SIZE + 10  # Adjust for new grid size
@@ -550,8 +550,10 @@ class Game:
             title = font.render("Status Log:", True, BLACK)
             self.screen.blit(title, (20, y_offset + 10))
             
-            # Draw messages horizontally
+            # Start logs below the title
             y_offset += 35
+            
+            # Draw messages within log area
             for message in self.status_messages[-self.max_messages:]:
                 words = message.split()
                 line = []
@@ -562,12 +564,20 @@ class Game:
                         text_surface = font.render(' '.join(line), True, BLACK)
                         self.screen.blit(text_surface, (20, y_offset))
                         y_offset += 20
-                        line = [word]
-                        if y_offset > GRID_SIZE * CELL_SIZE + LOG_HEIGHT - 30:
+                        
+                        # Stop drawing if log exceeds the panel height
+                        if y_offset > GRID_SIZE * CELL_SIZE + LOG_HEIGHT - 20:
                             break
+                        
+                        line = [word]
                 text_surface = font.render(' '.join(line), True, BLACK)
                 self.screen.blit(text_surface, (20, y_offset))
                 y_offset += 20
+
+                # Stop drawing if log exceeds the panel height
+                if y_offset > GRID_SIZE * CELL_SIZE + LOG_HEIGHT - 20:
+                    break
+
         
         pygame.display.flip()
 
