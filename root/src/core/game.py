@@ -11,19 +11,20 @@ from src.utils.metrics import PerformanceMetrics
 class Game:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((TOTAL_WIDTH, WINDOW_SIZE))
+        self.screen = pygame.display.set_mode((TOTAL_WIDTH, TOTAL_HEIGHT))
         pygame.display.set_caption("Multi-Robot Control System")
         
+        # Adjust grid size
         self.grid = [[CellType.EMPTY for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         self.current_tool = None
         self.robots = []
         self.tasks = []
-        self.moving_obstacles = []  # List of moving obstacles
+        self.moving_obstacles = []
         self.dynamic_tasks_enabled = True
         self.end_simulation = False
         self.start_time = None
         self.total_tasks_completed = 0
-        self.auction_interval = 2.0  # Auction every 2 seconds
+        self.auction_interval = 2.0
         self.last_auction_time = 0
         
         self.madql = MADQLAgent(self)
@@ -32,12 +33,12 @@ class Game:
         
         # Create buttons
         self.buttons = {
-            'robot': Button(WINDOW_SIZE + 20, 50, 160, 40, "Robot"),
-            'obstacle': Button(WINDOW_SIZE + 20, 100, 160, 40, "Obstacle"),
-            'task': Button(WINDOW_SIZE + 20, 150, 160, 40, "Task"),
-            'random': Button(WINDOW_SIZE + 20, 200, 160, 40, "Random Generate"),
-            'play': Button(WINDOW_SIZE + 20, 250, 160, 40, "Play"),
-            'end': Button(WINDOW_SIZE + 20, 300, 160, 40, "End")
+            'robot': Button(TOTAL_WIDTH - MENU_WIDTH + 20, 50, 160, 40, "Robot"),
+            'obstacle': Button(TOTAL_WIDTH - MENU_WIDTH + 20, 100, 160, 40, "Obstacle"),
+            'task': Button(TOTAL_WIDTH - MENU_WIDTH + 20, 150, 160, 40, "Task"),
+            'random': Button(TOTAL_WIDTH - MENU_WIDTH + 20, 200, 160, 40, "Random Generate"),
+            'play': Button(TOTAL_WIDTH - MENU_WIDTH + 20, 250, 160, 40, "Play"),
+            'end': Button(TOTAL_WIDTH - MENU_WIDTH + 20, 300, 160, 40, "End")
         }
         
         self.running = True
@@ -481,7 +482,7 @@ class Game:
     def draw(self):
         self.screen.fill(WHITE)
         
-        # Draw grid
+        # Draw grid (adjusted for smaller grid size)
         for y in range(GRID_SIZE):
             for x in range(GRID_SIZE):
                 rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
@@ -535,41 +536,38 @@ class Game:
                 self.screen.blit(text_surface, (WINDOW_SIZE + 20, y_offset))
                 y_offset += 25
         
-        # Draw status messages
+        # Draw status messages at the bottom horizontally
         if self.simulation_running or self.performance_metrics:
             font = pygame.font.Font(None, 24)
-            y_offset = 400 if self.performance_metrics else 350
+            y_offset = GRID_SIZE * CELL_SIZE + 10  # Adjust for new grid size
             
-            # Draw status panel background
-            status_panel = pygame.Rect(WINDOW_SIZE + 10, y_offset, MENU_WIDTH - 20, 200)
+            # Draw status panel background for logs
+            status_panel = pygame.Rect(10, GRID_SIZE * CELL_SIZE, TOTAL_WIDTH - 20, LOG_HEIGHT - 10)
             pygame.draw.rect(self.screen, (240, 240, 240), status_panel)
             pygame.draw.rect(self.screen, BLACK, status_panel, 2)
             
             # Draw title
             title = font.render("Status Log:", True, BLACK)
-            self.screen.blit(title, (WINDOW_SIZE + 20, y_offset + 10))
+            self.screen.blit(title, (20, y_offset + 10))
             
-            # Draw messages
+            # Draw messages horizontally
             y_offset += 35
-            for message in self.status_messages:
-                # Word wrap messages
+            for message in self.status_messages[-self.max_messages:]:
                 words = message.split()
-                lines = []
                 line = []
                 for word in words:
-                    if font.size(' '.join(line + [word]))[0] <= MENU_WIDTH - 40:
+                    if font.size(' '.join(line + [word]))[0] <= TOTAL_WIDTH - 40:
                         line.append(word)
                     else:
-                        lines.append(' '.join(line))
+                        text_surface = font.render(' '.join(line), True, BLACK)
+                        self.screen.blit(text_surface, (20, y_offset))
+                        y_offset += 20
                         line = [word]
-                lines.append(' '.join(line))
-                
-                for line in lines:
-                    text_surface = font.render(line, True, BLACK)
-                    self.screen.blit(text_surface, (WINDOW_SIZE + 20, y_offset))
-                    y_offset += 20
-                    if y_offset > WINDOW_SIZE - 20:  # Prevent drawing outside window
-                        break
+                        if y_offset > GRID_SIZE * CELL_SIZE + LOG_HEIGHT - 30:
+                            break
+                text_surface = font.render(' '.join(line), True, BLACK)
+                self.screen.blit(text_surface, (20, y_offset))
+                y_offset += 20
         
         pygame.display.flip()
 
