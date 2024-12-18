@@ -1,2 +1,7 @@
-pygame==2.5.2
-numpy==1.24.3 
+gym==0.26.2
+numpy==1.23.4
+stable-baselines3==2.0.0
+torch==2.1.0
+tensorflow==2.11.0
+matplotlib==3.7.1  # Optional, for visualization if needed
+pandas==1.5.3    # Optional, if you need it for data manipulation or analysis
