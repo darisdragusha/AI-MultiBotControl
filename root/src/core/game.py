@@ -106,7 +106,7 @@ class Game:
                     self.tasks.append(new_task)
                     self.add_status_message(f"Created P{priority} task at ({grid_x}, {grid_y})")
                     if self.simulation_running:
-                        self.assign_tasks()
+                        self.auction_tasks()
 
     def reallocate_all_tasks(self):
         """Reallocate all tasks among all robots for optimal distribution"""
@@ -134,35 +134,9 @@ class Game:
         
         self.tasks = all_tasks
         self.add_status_message("Reallocating all tasks for optimal distribution")
-        self.assign_tasks()
+        self.auction_tasks()
 
-    def assign_tasks(self):
-        """Assign tasks to robots using MADQL"""
-        unassigned_robots = [robot for robot in self.robots if not robot.target]
-        
-        for robot in unassigned_robots:
-            # Get current state
-            old_state = self.madql.get_state(robot)
-            
-            # Choose task using MADQL
-            chosen_task = self.madql.choose_action(robot)
-            
-            if chosen_task:
-                # Mark task as assigned
-                self.grid[chosen_task.y][chosen_task.x] = CellType.TARGET
-                robot.set_target(chosen_task)
-                self.tasks.remove(chosen_task)
-                
-                # Get new state and reward
-                new_state = self.madql.get_state(robot)
-                reward = self.madql.get_reward(robot, old_state, chosen_task, new_state)
-                
-                # Update Q-values
-                self.madql.update(robot, old_state, chosen_task, reward, new_state)
-                
-                self.add_status_message(
-                    f"Robot {robot.id} assigned to P{chosen_task.priority} task at ({chosen_task.x}, {chosen_task.y}) [R: {reward:.1f}]"
-                )
+    
 
     def generate_random_task(self):
         if len(self.tasks) < MAX_TASKS and random.random() < TASK_GEN_CHANCE:
@@ -222,11 +196,6 @@ class Game:
         if not self.tasks:
             return
 
-        current_time = time.time()
-        if current_time - self.last_auction_time < self.auction_interval:
-            return
-
-        self.last_auction_time = current_time
         unassigned_robots = [robot for robot in self.robots if not robot.target]
         if not unassigned_robots:
             return
@@ -238,30 +207,10 @@ class Game:
             for task in self.tasks:
                 # Base bid on Q-value
                 q_value = robot.q_table[robot_state].get(task, 0)
-                
-                # Adjust bid based on various factors
-                distance = robot.manhattan_distance((robot.x, robot.y), task.get_position())
-                path = self.astar.find_path((robot.x, robot.y), task.get_position())
-                
-                # Calculate path congestion
-                congestion = 0
-                if path:
-                    for px, py in path:
-                        for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
-                            check_x, check_y = px + dx, py + dy
-                            if 0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE:
-                                if self.grid[check_y][check_x] in [CellType.ROBOT, CellType.OBSTACLE]:
-                                    congestion += 1
 
-                # Calculate bid value
-                bid_value = (
-                    q_value * 2 +                    # Learning component
-                    task.priority * 30 +             # Priority bonus
-                    (1.0 - distance/GRID_SIZE) * 20 + # Distance factor
-                    (1.0 - congestion/len(path) if path else 0) * 10 + # Congestion factor
-                    task.get_waiting_time() * 5      # Waiting time bonus
-                )
-                
+                # Calculate bid value (only Q-value used)
+                bid_value = q_value
+
                 bids.append((robot, task, bid_value))
 
         # Sort bids by value
@@ -272,20 +221,21 @@ class Game:
         assigned_robots = set()
 
         for robot, task, bid_value in bids:
-            if (robot not in assigned_robots and 
-                task not in assigned_tasks and 
-                task in self.tasks):  # Check if task still available
-                
+            if (robot not in assigned_robots and
+                    task not in assigned_tasks and
+                    task in self.tasks):  # Check if task still available
+
                 # Assign task
                 self.grid[task.y][task.x] = CellType.TARGET
                 robot.set_target(task)
                 self.tasks.remove(task)
                 assigned_tasks.add(task)
                 assigned_robots.add(robot)
-                
+
                 self.add_status_message(
                     f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.1f}"
                 )
+
 
     def update_simulation(self):
         if not self.simulation_running:
@@ -307,8 +257,7 @@ class Game:
         # Run auction-based task allocation
         self.auction_tasks()
         
-        # Also use MADQL for learning and improvement
-        self.assign_tasks()
+
             
         # First, reset waiting status for all robots at the start of each update
         for robot in self.robots:
