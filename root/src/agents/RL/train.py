@@ -3,15 +3,15 @@ from gym import spaces
 import numpy as np
 from stable_baselines3 import DQN
 
-# Define the environment
+# Define the environment with a variable number of tasks
 class AuctionEnv(gym.Env):
-    def __init__(self, num_agents=1, num_tasks=3, grid_size=10):
+    def __init__(self, num_agents=1, grid_size=10, num_tasks=5):
         super(AuctionEnv, self).__init__()
 
         self.num_agents = num_agents
-        self.num_tasks = num_tasks
         self.grid_size = grid_size  # Define a 10x10 grid
-
+        self.num_tasks = num_tasks if num_tasks is not None else np.random.randint(1, 6)  # Random number of tasks between 1 and 5
+        
         # Define action space: Each agent chooses a task to bid on (Discrete space)
         self.action_space = spaces.Discrete(self.num_tasks)
 
@@ -24,10 +24,14 @@ class AuctionEnv(gym.Env):
         self.task_positions = np.random.randint(0, self.grid_size, size=(self.num_tasks, 2))
         self.agent_positions = np.random.randint(0, self.grid_size, size=(self.num_agents, 2))
 
-    def reset(self, agent_positions=None, task_positions=None):
+    def reset(self, agent_positions=None, task_positions=None, num_tasks=None):
         """
-        Resets the environment by either using custom or random agent and task positions.
+        Resets the environment with either custom or random agent and task positions.
         """
+        if num_tasks is not None:
+            self.num_tasks = num_tasks  # Set a custom number of tasks
+            self.action_space = spaces.Discrete(self.num_tasks)  # Update action space
+
         if agent_positions is not None:
             self.agent_positions = np.array(agent_positions)
         else:
@@ -74,19 +78,17 @@ class AuctionEnv(gym.Env):
         observation = np.concatenate([self.agent_positions.flatten(), self.task_positions.flatten()])
         return observation, np.mean(rewards), done, {}
 
-# Create the environment with a 10x10 grid
-env = AuctionEnv(num_agents=1, num_tasks=3, grid_size=10)
+# Create the environment with a 10x10 grid and a random number of tasks
+env = AuctionEnv(num_agents=1, grid_size=10)
 
-# Reset the environment to train with random positions
+# Reset the environment with random positions
 obs = env.reset()
 
-# Initialize the DQN agent with hyperparameters for exploration
+# Initialize the DQN agent with dynamic number of tasks
 model = DQN("MlpPolicy", env, verbose=1, exploration_fraction=0.5, exploration_final_eps=0.1)
 
-# Train the model for more steps (increase timesteps for better learning)
-model.learn(total_timesteps=50000)  
+# Train the model for more steps with a variable number of tasks
+model.learn(total_timesteps=100000)
 
-# Save the model
+# Save the trained model
 model.save("auction_bid_model")
-
-

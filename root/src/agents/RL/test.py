@@ -4,17 +4,17 @@ import numpy as np
 from stable_baselines3 import DQN
 
 class AuctionEnv(gym.Env):
-    def __init__(self, num_agents=1, num_tasks=3, grid_size=10):
+    def __init__(self, num_agents=1, num_tasks=5, grid_size=10):
         super(AuctionEnv, self).__init__()
 
         self.num_agents = num_agents
         self.num_tasks = num_tasks
         self.grid_size = grid_size  # Define a 10x10 grid
 
-        # Define action space: Each agent chooses a task to bid on (Discrete space)
+        # Define action space dynamically based on num_tasks
         self.action_space = spaces.Discrete(self.num_tasks)
 
-        # Observation space: Each agent's position (2D grid) and task positions (2D grid)
+        # Observation space: agent positions + task positions (dynamic length based on num_tasks)
         self.observation_space = spaces.Box(
             low=0, high=self.grid_size-1, shape=(self.num_agents * 2 + self.num_tasks * 2,), dtype=np.int32
         )
@@ -25,7 +25,7 @@ class AuctionEnv(gym.Env):
 
     def reset(self, agent_positions=None, task_positions=None):
         """
-        Resets the environment by either using custom or random agent and task positions.
+        Resets the environment with custom positions if provided, else random positions.
         """
         if agent_positions is not None:
             self.agent_positions = np.array(agent_positions)
@@ -37,14 +37,14 @@ class AuctionEnv(gym.Env):
         else:
             self.task_positions = np.random.randint(0, self.grid_size, size=(self.num_tasks, 2))
 
+        # Flatten agent and task positions into a single observation vector
         observation = np.concatenate([self.agent_positions.flatten(), self.task_positions.flatten()])
         return observation
 
     def step(self, actions):
         """
-        actions: A list of actions for each agent, where each action is the task index they bid on.
+        Executes actions and returns the next state, reward, done flag, and additional info.
         """
-
         rewards = []
         if isinstance(actions, np.ndarray) and actions.ndim > 0:
             for agent_id, action in enumerate(actions):
@@ -67,24 +67,51 @@ class AuctionEnv(gym.Env):
 # Load the trained model
 model = DQN.load("auction_bid_model.zip")
 
-# Create the environment with a 10x10 grid
-env = AuctionEnv(num_agents=1, num_tasks=3, grid_size=10)
+# Example of dynamic number of tasks for testing (change num_tasks here)
+num_tasks = 10  # Can be changed dynamically
+env = AuctionEnv(num_agents=1, num_tasks=num_tasks, grid_size=10)
 
-# Example custom agent and task positions for prediction
-custom_agent_positions = [[2, 7]]  # Define positions of agents (within 0-9 range)
-custom_task_positions = [[1, 2], [5, 5], [7, 7]]  # Define positions of tasks (within 0-9 range)
+# Agent positions (10 agents)
+agent_positions = np.array([
+    [2, 3],  # Agent 1
+    [7, 6],  # Agent 2
+    [1, 1],  # Agent 3
+    [5, 8],  # Agent 4
+    [9, 2],  # Agent 5
+    [4, 4],  # Agent 6
+    [3, 6],  # Agent 7
+    [8, 1],  # Agent 8
+    [6, 7],  # Agent 9
+    [0, 9]   # Agent 10
+])
 
-# Reset the environment with custom positions for prediction
-obs = env.reset(agent_positions=custom_agent_positions, task_positions=custom_task_positions)
+# Task positions (5 tasks)
+task_positions = np.array([
+    [1, 5],  # Task 1
+    [4, 2],  # Task 2
+    [8, 8],  # Task 3
+    [6, 3],  # Task 4
+    [3, 7]   # Task 5
+])
 
-# Example of using the trained model to predict actions for the single agent
-for _ in range(10):
-    # Predict actions for the single agent
+num_robots = 7
+for agent in agent_positions:
+
+    # Example custom agent and task positions for prediction (also dynamic)
+    custom_agent_positions = [agent]  # Define positions of agents (within 0-9 range)
+    custom_task_positions = task_positions  # Define positions of tasks (within 0-9 range)
+
+    # Reset the environment with custom positions for prediction
+    obs = env.reset(agent_positions=custom_agent_positions, task_positions=custom_task_positions)
+
+    # Predict the action for a single step
     action, _states = model.predict(obs)
     print(f"Predicted Action: {action}, Agent's position: {obs[:2]}, Task positions: {obs[2:]}")
 
-    # Perform the action in the environment (for the single agent)
-    obs, reward, done, info = env.step(action)  # Pass action for the single agent
-    
+    # Perform the action in the environment
+    obs, reward, done, info = env.step(action)
+
+    # You can then decide whether to break or continue based on your logic
     if done:
-        break
+        print("----")
+
