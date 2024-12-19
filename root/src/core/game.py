@@ -1,12 +1,15 @@
 import pygame
 import random
 import time
+import numpy as np
 from src.core.constants import *
 from src.core.entities import Robot, CellType, Task
 from src.agents.madql_agent import MADQLAgent
 from src.agents.astar import AStar
 from src.ui.button import Button
 from src.utils.metrics import PerformanceMetrics
+from src.agents.RL.predict import predict_action  # Adjust path if necessary
+
 
 class Game:
     def __init__(self):
@@ -27,7 +30,6 @@ class Game:
         self.auction_interval = 2.0
         self.last_auction_time = 0
         
-        self.madql = MADQLAgent(self)
         self.astar = AStar(self)
         self.clock = pygame.time.Clock()
         
@@ -86,14 +88,26 @@ class Game:
             if self.current_tool == 'robot':
                 if self.grid[grid_y][grid_x] == CellType.EMPTY:
                     self.grid[grid_y][grid_x] = CellType.ROBOT
-                    new_robot = Robot(grid_x, grid_y)
+                    
+                    # Assuming you have a DQN model or object to pass here (use None if not required)
+
+                    # Create a new robot object and assign properties
+                    new_robot = Robot(grid_x, grid_y, self.robot_counter)  # Pass id and dqn
+                    
+                    # Increment robot counter and assign it to the robot
                     self.robot_counter += 1
-                    new_robot.id = self.robot_counter
+                    
+                    # Add new robot to the robots list
                     self.robots.append(new_robot)
+                    
+                    # Add status message for robot placement
                     self.add_status_message(f"Robot {new_robot.id} placed at ({grid_x}, {grid_y})")
-                    # Reallocate tasks when new robot is added
+                    
+                    # Reallocate tasks if the simulation is running
                     if self.simulation_running:
                         self.reallocate_all_tasks()
+
+
             elif self.current_tool == 'obstacle':
                 if self.grid[grid_y][grid_x] not in [CellType.ROBOT, CellType.TARGET]:
                     self.grid[grid_y][grid_x] = CellType.OBSTACLE
@@ -106,7 +120,7 @@ class Game:
                     self.tasks.append(new_task)
                     self.add_status_message(f"Created P{priority} task at ({grid_x}, {grid_y})")
                     if self.simulation_running:
-                        self.assign_tasks()
+                        self.auction_tasks()
 
     def reallocate_all_tasks(self):
         """Reallocate all tasks among all robots for optimal distribution"""
@@ -134,35 +148,9 @@ class Game:
         
         self.tasks = all_tasks
         self.add_status_message("Reallocating all tasks for optimal distribution")
-        self.assign_tasks()
+        self.auction_tasks()
 
-    def assign_tasks(self):
-        """Assign tasks to robots using MADQL"""
-        unassigned_robots = [robot for robot in self.robots if not robot.target]
-        
-        for robot in unassigned_robots:
-            # Get current state
-            old_state = self.madql.get_state(robot)
-            
-            # Choose task using MADQL
-            chosen_task = self.madql.choose_action(robot)
-            
-            if chosen_task:
-                # Mark task as assigned
-                self.grid[chosen_task.y][chosen_task.x] = CellType.TARGET
-                robot.set_target(chosen_task)
-                self.tasks.remove(chosen_task)
-                
-                # Get new state and reward
-                new_state = self.madql.get_state(robot)
-                reward = self.madql.get_reward(robot, old_state, chosen_task, new_state)
-                
-                # Update Q-values
-                self.madql.update(robot, old_state, chosen_task, reward, new_state)
-                
-                self.add_status_message(
-                    f"Robot {robot.id} assigned to P{chosen_task.priority} task at ({chosen_task.x}, {chosen_task.y}) [R: {reward:.1f}]"
-                )
+    
 
     def generate_random_task(self):
         if len(self.tasks) < MAX_TASKS and random.random() < TASK_GEN_CHANCE:
@@ -218,53 +206,48 @@ class Game:
                 obstacle['dx'], obstacle['dy'] = random.choice([(0,1), (1,0), (0,-1), (-1,0)])
 
     def auction_tasks(self):
-        """Market-based task allocation using auction mechanism"""
+        """Market-based task allocation using auction mechanism."""
         if not self.tasks:
             return
 
-        current_time = time.time()
-        if current_time - self.last_auction_time < self.auction_interval:
-            return
-
-        self.last_auction_time = current_time
         unassigned_robots = [robot for robot in self.robots if not robot.target]
         if not unassigned_robots:
             return
 
+        # Ensure task positions are always 5
+        task_positions = [task.get_position() for task in self.tasks]
+        if len(task_positions) > 5:
+            task_positions = task_positions[:5]  # Take the first 5
+        elif len(task_positions) < 5:
+            while len(task_positions) < 5:
+                task_positions.append(task_positions[-1])  # Repeat the last position
+
         # Calculate bids for each robot-task pair
         bids = []
         for robot in unassigned_robots:
-            robot_state = self.madql.get_state(robot)
-            for task in self.tasks:
-                # Base bid on Q-value
-                q_value = robot.q_table[robot_state].get(task, 0)
-                
-                # Adjust bid based on various factors
-                distance = robot.manhattan_distance((robot.x, robot.y), task.get_position())
-                path = self.astar.find_path((robot.x, robot.y), task.get_position())
-                
-                # Calculate path congestion
-                congestion = 0
-                if path:
-                    for px, py in path:
-                        for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
-                            check_x, check_y = px + dx, py + dy
-                            if 0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE:
-                                if self.grid[check_y][check_x] in [CellType.ROBOT, CellType.OBSTACLE]:
-                                    congestion += 1
+            # Get the predicted task for the robot using the predict function
+            predicted_task_index = predict_action(robot.position, task_positions)  # Use the imported function
 
-                # Calculate bid value
-                bid_value = (
-                    q_value * 2 +                    # Learning component
-                    task.priority * 30 +             # Priority bonus
-                    (1.0 - distance/GRID_SIZE) * 20 + # Distance factor
-                    (1.0 - congestion/len(path) if path else 0) * 10 + # Congestion factor
-                    task.get_waiting_time() * 5      # Waiting time bonus
-                )
-                
-                bids.append((robot, task, bid_value))
+            # Ensure the predicted index is within the valid range
+            if predicted_task_index < 0 or predicted_task_index >= len(self.tasks):
+                continue  # Skip this iteration if the index is invalid
 
-        # Sort bids by value
+            predicted_task = self.tasks[predicted_task_index]
+            print(f"Robot {robot.id} predicted task at {predicted_task.get_position()}")
+
+            # Correctly calculate Manhattan distance
+            manhattan_distance = robot.manhattan_distance(
+                robot.position,  # Robot's current position as a tuple (x, y)
+                predicted_task.get_position()  # Task's position as a tuple (x, y)
+            )
+
+            # Avoid division by zero
+            bid_value = 1 / manhattan_distance if manhattan_distance != 0 else float('inf')
+
+            # Append the bid
+            bids.append((robot, predicted_task, bid_value))
+
+        # Sort bids by value (higher bid wins)
         bids.sort(key=lambda x: x[2], reverse=True)
 
         # Assign tasks to highest bidders
@@ -272,19 +255,45 @@ class Game:
         assigned_robots = set()
 
         for robot, task, bid_value in bids:
-            if (robot not in assigned_robots and 
-                task not in assigned_tasks and 
-                task in self.tasks):  # Check if task still available
-                
+            if (robot not in assigned_robots and
+                    task not in assigned_tasks and
+                    task in self.tasks):  # Check if task still available
+
                 # Assign task
                 self.grid[task.y][task.x] = CellType.TARGET
                 robot.set_target(task)
                 self.tasks.remove(task)
                 assigned_tasks.add(task)
                 assigned_robots.add(robot)
-                
+
+                # Print successful bid message
+                print(f"Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}")
                 self.add_status_message(
-                    f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.1f}"
+                    f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}"
+                )
+
+
+        # Sort bids by value (higher bid wins)
+        bids.sort(key=lambda x: x[2], reverse=True)
+
+        # Assign tasks to highest bidders
+        assigned_tasks = set()
+        assigned_robots = set()
+
+        for robot, task, bid_value in bids:
+            if (robot not in assigned_robots and
+                    task not in assigned_tasks and
+                    task in self.tasks):  # Check if task still available
+
+                # Assign task
+                self.grid[task.y][task.x] = CellType.TARGET
+                robot.set_target(task)
+                self.tasks.remove(task)
+                assigned_tasks.add(task)
+                assigned_robots.add(robot)
+
+                self.add_status_message(
+                    f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}"
                 )
 
     def update_simulation(self):
@@ -307,8 +316,7 @@ class Game:
         # Run auction-based task allocation
         self.auction_tasks()
         
-        # Also use MADQL for learning and improvement
-        self.assign_tasks()
+
             
         # First, reset waiting status for all robots at the start of each update
         for robot in self.robots:
@@ -397,8 +405,7 @@ class Game:
 
                 if not collision:
                     # Get old state before moving
-                    old_state = self.madql.get_state(robot)
-                    
+                    old_state = robot.get_state()
                     # Update grid and robot position
                     self.grid[robot.y][robot.x] = CellType.EMPTY
                     old_pos = (robot.x, robot.y)
@@ -408,13 +415,10 @@ class Game:
                     robot.last_move_time = current_time
                     robot.total_distance += 1
                     robot.waiting = False
+
+                    new_state = robot.get_state()
+
                     
-                    # Get new state and update Q-values
-                    new_state = self.madql.get_state(robot)
-                    reward = self.madql.get_reward(robot, old_state, next_pos, new_state)
-                    self.madql.update(robot, old_state, next_pos, reward, new_state)
-                    
-                    # Check if reached target
                     if robot.target and (robot.x, robot.y) == robot.target.get_position():
                         completed_priority = robot.target.priority
                         robot.target = None
@@ -423,28 +427,7 @@ class Game:
                         self.add_status_message(
                             f"Robot {robot.id}: Completed P{completed_priority} task! Total: {robot.completed_tasks}"
                         )
-                else:
-                    robot.waiting = True
-                    if colliding_robot:
-                        # If both robots are waiting too long, force one to find alternative path
-                        if (robot.waiting and colliding_robot.waiting and 
-                            current_time - robot.last_move_time > MOVE_DELAY * 3):
-                            # Robot with lower priority task should find alternative
-                            if (robot.target and colliding_robot.target and 
-                                robot.target.priority <= colliding_robot.target.priority):
-                                robot.path = []  # Force path recalculation
-                                self.add_status_message(
-                                    f"Robot {robot.id}: Finding alternative path (lower priority)"
-                                )
-                            elif robot.waiting_time > colliding_robot.waiting_time:
-                                robot.path = []  # Force path recalculation
-                                self.add_status_message(
-                                    f"Robot {robot.id}: Finding alternative path (waited longer)"
-                                )
-                        else:
-                            self.add_status_message(
-                                f"Robot {robot.id}: Waiting for Robot {colliding_robot.id} to move"
-                            )
+
         
         # Check if simulation should end
         if self.end_simulation and not any(robot.target for robot in self.robots):
@@ -464,11 +447,11 @@ class Game:
                 x, y = random.randint(0, GRID_SIZE-1), random.randint(0, GRID_SIZE-1)
                 if self.grid[y][x] == CellType.EMPTY:
                     self.grid[y][x] = CellType.ROBOT
-                    new_robot = Robot(x, y)
+                    new_robot = Robot(x, y, id=self.robot_counter + 1)  # No dqn needed now
                     self.robot_counter += 1
-                    new_robot.id = self.robot_counter
                     self.robots.append(new_robot)
                     break
+
         
         # Add random obstacles (5-8)
         num_obstacles = random.randint(5, 8)
