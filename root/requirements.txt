@@ -1,7 +1,5 @@
-gym==0.26.2
-numpy==1.23.4
-stable-baselines3==2.0.0
+gym
+numpy
+stable-baselines3[extra]
 torch==2.1.0
-tensorflow==2.11.0
-matplotlib==3.7.1  # Optional, for visualization if needed
-pandas==1.5.3    # Optional, if you need it for data manipulation or analysis
+tensorflow
