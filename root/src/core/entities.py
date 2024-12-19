@@ -26,9 +26,11 @@ class Task:
         return time.time() - self.creation_time
 
 class Robot:
-    def __init__(self, x, y, id, dqn):
-        self.x = x
-        self.y = y
+    def __init__(self, x, y, id):
+        # Use a tuple for position instead of separate x and y
+        self.position = (x, y)
+        self.x=x
+        self.y=y
         self.target = None  # Will now store Task object instead of just position
         self.path = []
         self.waiting = False
@@ -42,7 +44,6 @@ class Robot:
         self.id = id
         self.last_action = None
         self.last_state = None
-        self.dqn = dqn
 
     def set_target(self, task):
         self.target = task
@@ -61,26 +62,44 @@ class Robot:
                 self.waiting_time += current_time - self.last_waiting_start
             self.waiting = False
             self.last_waiting_start = None
-            
+
     def act(self, tasks, epsilon=0.1):
         """
         The robot decides how much to bid for each task using the DQN model.
         """
         bids = {}
         for task in tasks:
-            state = np.array([self.x, self.y, task.x, task.y, task.priority], dtype=np.float32)
+            state = np.array([self.position[0], self.position[1], task.x, task.y, task.priority], dtype=np.float32)
             if random.random() < epsilon:  # Exploration: random bid
                 bid = random.uniform(0, 1)
             else:  # Exploitation: use the DQN to decide on bid
                 bid = self.dqn.predict(state)
 
             # Normalize bid based on distance and priority
-            distance = self.manhattan_distance((self.x, self.y), (task.x, task.y))
+            distance = self.manhattan_distance(self.position, (task.x, task.y))
             bid += (task.priority * 0.1)  # Priority increases the bid
             bid -= (distance * 0.05)  # Distance decreases the bid
 
             bids[task] = bid
         return bids
+
+    def get_state(self):
+        """
+        Return the robot's state as a vector.
+        """
+        if self.target:
+            target_x, target_y = self.target.get_position()
+            target_priority = self.target.priority
+        else:
+            target_x, target_y = -1, -1  # No target assigned
+            target_priority = 0
+
+        state = np.array([
+            self.position[0], self.position[1],  # Robot's position
+            target_x, target_y,   # Target position
+            target_priority       # Target priority
+        ], dtype=np.float32)
+        return state
 
     def learn(self, state, action, reward, next_state, done):
         self.dqn.train(state, action, reward, next_state, done)

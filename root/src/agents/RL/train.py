@@ -2,7 +2,7 @@ import gym
 from gym import spaces
 import numpy as np
 from stable_baselines3 import DQN
-from root.src.agents.RL.auction_env import AuctionEnv
+from src.agents.RL.auction_env import AuctionEnv
 
 # Create the environment with a 10x10 grid and a random number of tasks
 env = AuctionEnv(num_agents=1, grid_size=10)
@@ -17,4 +17,4 @@ model = DQN("MlpPolicy", env, verbose=1, exploration_fraction=0.5, exploration_f
 model.learn(total_timesteps=1000000)
 
 # Save the trained model
-model.save("auction_bid_model")
+model.save("src/agents/RL/auction_bid_model")

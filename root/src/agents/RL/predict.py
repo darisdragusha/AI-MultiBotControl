@@ -1,6 +1,7 @@
 import numpy as np
+import os
 from stable_baselines3 import DQN
-from auction_env import AuctionEnv  # Assuming your AuctionEnv class is in train.py
+from src.agents.RL.auction_env import AuctionEnv
 
 def predict_action(agent_position, task_positions):
     """
@@ -14,7 +15,13 @@ def predict_action(agent_position, task_positions):
         int: The predicted action (task index).
     """
     # Load the trained model
-    model = DQN.load("auction_bid_model.zip")
+
+# Define the absolute path to your model file
+    model_path = os.path.join(os.getcwd(), "root", "src", "agents", "RL", "auction_bid_model.zip")
+
+# Load the model
+    model = DQN.load(model_path)
+
     
     # Initialize the environment with dynamic task count
     num_tasks = len(task_positions)
