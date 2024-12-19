@@ -192,7 +192,7 @@ class Game:
                 obstacle['dx'], obstacle['dy'] = random.choice([(0,1), (1,0), (0,-1), (-1,0)])
 
     def auction_tasks(self):
-        """Market-based task allocation using auction mechanism"""
+        """Market-based task allocation using auction mechanism."""
         if not self.tasks:
             return
 
@@ -200,20 +200,31 @@ class Game:
         if not unassigned_robots:
             return
 
+        # Ensure task positions are always 5
+        task_positions = [task.position for task in self.tasks]
+        if len(task_positions) > 5:
+            task_positions = task_positions[:5]  # Take the first 5
+        elif len(task_positions) < 5:
+            while len(task_positions) < 5:
+                task_positions.append(task_positions[-1])  # Repeat the last position
+
         # Calculate bids for each robot-task pair
         bids = []
         for robot in unassigned_robots:
-            robot_state = self.madql.get_state(robot)
-            for task in self.tasks:
-                # Base bid on Q-value
-                q_value = robot.q_table[robot_state].get(task, 0)
+            # Get the predicted task for the robot using the predict function
+            predicted_task_index = self.predict(robot.position, task_positions)
+            predicted_task = self.tasks[predicted_task_index]
 
-                # Calculate bid value (only Q-value used)
-                bid_value = q_value
+            # Calculate Manhattan distance
+            manhattan_distance = robot.manhattan_distance(predicted_task)
 
-                bids.append((robot, task, bid_value))
+            # Avoid division by zero
+            bid_value = 1 / manhattan_distance if manhattan_distance != 0 else float('inf')
 
-        # Sort bids by value
+            # Append the bid
+            bids.append((robot, predicted_task, bid_value))
+
+        # Sort bids by value (higher bid wins)
         bids.sort(key=lambda x: x[2], reverse=True)
 
         # Assign tasks to highest bidders
@@ -233,7 +244,7 @@ class Game:
                 assigned_robots.add(robot)
 
                 self.add_status_message(
-                    f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.1f}"
+                    f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}"
                 )
 
 
