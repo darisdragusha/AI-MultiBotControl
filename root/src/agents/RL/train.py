@@ -88,7 +88,7 @@ obs = env.reset()
 model = DQN("MlpPolicy", env, verbose=1, exploration_fraction=0.5, exploration_final_eps=0.1)
 
 # Train the model for more steps with a variable number of tasks
-model.learn(total_timesteps=100000)
+model.learn(total_timesteps=1000000)
 
 # Save the trained model
 model.save("auction_bid_model")
