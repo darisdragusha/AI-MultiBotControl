@@ -201,7 +201,7 @@ class Game:
             return
 
         # Ensure task positions are always 5
-        task_positions = [task.position for task in self.tasks]
+        task_positions = [task.get_position() for task in self.tasks]
         if len(task_positions) > 5:
             task_positions = task_positions[:5]  # Take the first 5
         elif len(task_positions) < 5:
@@ -214,9 +214,13 @@ class Game:
             # Get the predicted task for the robot using the predict function
             predicted_task_index = self.predict(robot.position, task_positions)
             predicted_task = self.tasks[predicted_task_index]
+            print(robot.position,predicted_task.get_position())
 
-            # Calculate Manhattan distance
-            manhattan_distance = robot.manhattan_distance(predicted_task)
+            # Correctly calculate Manhattan distance
+            manhattan_distance = robot.manhattan_distance(
+                (robot.x, robot.y),  # Robot's current position
+                (predicted_task.x, predicted_task.y)  # Task's position
+            )
 
             # Avoid division by zero
             bid_value = 1 / manhattan_distance if manhattan_distance != 0 else float('inf')
@@ -246,7 +250,6 @@ class Game:
                 self.add_status_message(
                     f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}"
                 )
-
 
     def update_simulation(self):
         if not self.simulation_running:
