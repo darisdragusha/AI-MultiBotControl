@@ -230,7 +230,6 @@ class Game:
 
             # Ensure the predicted index is within the valid range
             if predicted_task_index < 0 or predicted_task_index >= len(self.tasks):
-                print(f"Invalid task index {predicted_task_index}. Skipping robot {robot.id}.")
                 continue  # Skip this iteration if the index is invalid
 
             predicted_task = self.tasks[predicted_task_index]
