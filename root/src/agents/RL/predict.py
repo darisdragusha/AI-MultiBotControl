@@ -1,6 +1,6 @@
 import numpy as np
 from stable_baselines3 import DQN
-from train import AuctionEnv  # Assuming your AuctionEnv class is in train.py
+from auction_env import AuctionEnv  # Assuming your AuctionEnv class is in train.py
 
 def predict_action(agent_position, task_positions):
     """
