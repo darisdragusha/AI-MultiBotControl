@@ -211,6 +211,11 @@ class Game:
         if not unassigned_robots:
             return
 
+        # Ensure there are enough tasks for all unassigned robots
+        if len(self.tasks) < len(unassigned_robots):
+            print("Not enough tasks for all robots. Waiting for more tasks...")
+            return
+
         # Ensure task positions are consistent
         task_positions = [task.get_position() for task in self.tasks]
         if len(task_positions) > 5:
@@ -250,6 +255,7 @@ class Game:
         # Step 3: Sort bids by value (higher bid wins)
         bids.sort(key=lambda x: x[2], reverse=True)
         print("Bids:", bids)
+
         # Step 4: Assign tasks to the highest bidders
         assigned_tasks = set()
         assigned_robots = set()
