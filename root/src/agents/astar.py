@@ -12,11 +12,23 @@ class AStar:
     def get_neighbors(self, pos):
         x, y = pos
         neighbors = []
+        # Basic movements: up, down, left, right
         for dx, dy in [(0,1), (0,-1), (1,0), (-1,0)]:
             new_x, new_y = x + dx, y + dy
+            # Check grid boundaries and static obstacles
             if (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE and 
                 self.game.grid[new_y][new_x] != CellType.OBSTACLE):
-                neighbors.append((new_x, new_y))
+                
+                # Only avoid direct collisions with robot positions
+                robot_present = False
+                for robot in self.game.robots:
+                    if robot.x == new_x and robot.y == new_y:
+                        robot_present = True
+                        break
+                
+                if not robot_present:
+                    neighbors.append((new_x, new_y))
+        
         return neighbors
     
     def find_path(self, start, goal):
