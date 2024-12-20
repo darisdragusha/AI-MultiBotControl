@@ -32,19 +32,7 @@ def predict_action(agent_position, task_positions):
     
     # Predict the action
     action, _ = model.predict(obs)
+    print("agent: ",agent_position, task_positions,action)
     return action
 
 
-# Define agent and task positions
-agent_position = [2, 3]
-task_positions = [
-    [1, 5],
-    [4, 2],
-    [8, 8],
-    [6, 3],
-    [3, 7]
-]
-
-# Predict the action
-action = predict_action(agent_position, task_positions)
-print(f"Predicted Action: {action}")

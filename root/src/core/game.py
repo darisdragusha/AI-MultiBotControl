@@ -229,7 +229,8 @@ class Game:
                 predicted_task = self.tasks[predicted_task_index]
                 robot_predictions[robot] = predicted_task
             else:
-                print(f"Robot {robot.id} made an invalid prediction.")
+                predicted_task = self.tasks[-1]
+                robot_predictions[robot] = predicted_task
 
         # Step 2: Robots place bids on their predicted tasks
         bids = []
@@ -248,7 +249,7 @@ class Game:
 
         # Step 3: Sort bids by value (higher bid wins)
         bids.sort(key=lambda x: x[2], reverse=True)
-
+        print("Bids:", bids)
         # Step 4: Assign tasks to the highest bidders
         assigned_tasks = set()
         assigned_robots = set()
