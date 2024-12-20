@@ -211,7 +211,7 @@ class Game:
         if not unassigned_robots:
             return
 
-        # Ensure task positions are consistent
+        # Ensure task positions are always 5
         task_positions = [task.get_position() for task in self.tasks]
         if len(task_positions) > 5:
             task_positions = task_positions[:5]  # Take the first 5
@@ -219,25 +219,23 @@ class Game:
             while len(task_positions) < 5:
                 task_positions.append(task_positions[-1])  # Repeat the last position
 
-        # Step 1: Predict the preferred task for each robot
-        robot_predictions = {}
-        for robot in unassigned_robots:
-            predicted_task_index = predict_action(robot.position, task_positions)
-
-            # Ensure the predicted index is valid
-            if 0 <= predicted_task_index < len(self.tasks):
-                predicted_task = self.tasks[predicted_task_index]
-                robot_predictions[robot] = predicted_task
-            else:
-                print(f"Robot {robot.id} made an invalid prediction.")
-
-        # Step 2: Robots place bids on their predicted tasks
+        # Calculate bids for each robot-task pair
         bids = []
-        for robot, predicted_task in robot_predictions.items():
-            # Calculate Manhattan distance
+        for robot in unassigned_robots:
+            # Get the predicted task for the robot using the predict function
+            predicted_task_index = predict_action(robot.position, task_positions)  # Use the imported function
+
+            # Ensure the predicted index is within the valid range
+            if predicted_task_index < 0 or predicted_task_index >= len(self.tasks):
+                continue  # Skip this iteration if the index is invalid
+
+            predicted_task = self.tasks[predicted_task_index]
+            print(f"Robot {robot.id} predicted task at {predicted_task.get_position()}")
+
+            # Correctly calculate Manhattan distance
             manhattan_distance = robot.manhattan_distance(
-                robot.position,
-                predicted_task.get_position()
+                robot.position,  # Robot's current position as a tuple (x, y)
+                predicted_task.get_position()  # Task's position as a tuple (x, y)
             )
 
             # Avoid division by zero
@@ -246,17 +244,17 @@ class Game:
             # Append the bid
             bids.append((robot, predicted_task, bid_value))
 
-        # Step 3: Sort bids by value (higher bid wins)
+        # Sort bids by value (higher bid wins)
         bids.sort(key=lambda x: x[2], reverse=True)
 
-        # Step 4: Assign tasks to the highest bidders
+        # Assign tasks to highest bidders
         assigned_tasks = set()
         assigned_robots = set()
 
         for robot, task, bid_value in bids:
             if (robot not in assigned_robots and
                     task not in assigned_tasks and
-                    task in self.tasks):  # Check if task is still available
+                    task in self.tasks):  # Check if task still available
 
                 # Assign task
                 self.grid[task.y][task.x] = CellType.TARGET
@@ -270,7 +268,6 @@ class Game:
                 self.add_status_message(
                     f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}"
                 )
-
 
     def update_simulation(self):
         if not self.simulation_running:
