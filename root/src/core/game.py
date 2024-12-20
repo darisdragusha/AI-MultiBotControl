@@ -89,7 +89,7 @@ class Game:
                     self.grid[grid_y][grid_x] = CellType.ROBOT
                     
                     # Create a new robot object and assign properties
-                    new_robot = Robot(grid_x, grid_y, self.robot_counter)  # Pass id and dqn
+                    new_robot = Robot(grid_x, grid_y, self.robot_counter)  # Pass id 
                     
                     # Increment robot counter and assign it to the robot
                     self.robot_counter += 1
@@ -333,8 +333,10 @@ class Game:
                         self.add_status_message(
                             f"Robot {robot.id}: No path to P{robot.target.priority} task"
                         )
-                        # If no path found, clear target and try another task
+                        # If no path found, clear target, add task in the list again and try another task
+                        self.tasks.append(Task(robot.target.x, robot.target.y, robot.target.priority))
                         robot.target = None
+                        
                         continue
                     robot.path.pop(0)  # Remove current position
 
@@ -469,23 +471,7 @@ class Game:
         for button in self.buttons.values():
             button.draw(self.screen)
         
-        # Draw performance metrics if available
-        if self.performance_metrics:
-            font = pygame.font.Font(None, 24)
-            metrics_text = [
-                f"Time: {self.performance_metrics['total_time']:.1f}s",
-                f"Tasks: {self.performance_metrics['total_tasks']}",
-                f"Distance: {self.performance_metrics['total_distance']}",
-                f"Time Saved: {self.performance_metrics['time_saved']:.1f}s",
-                f"Distance Saved: {self.performance_metrics['distance_saved']:.1f}",
-                f"Tasks/s: {self.performance_metrics['tasks_per_second']:.2f}"
-            ]
-            
-            y_offset = 350
-            for text in metrics_text:
-                text_surface = font.render(text, True, BLACK)
-                self.screen.blit(text_surface, (WINDOW_SIZE + 20, y_offset))
-                y_offset += 25
+        
         
         # Draw status messages at the bottom
         if self.simulation_running or self.performance_metrics:
