@@ -222,6 +222,7 @@ class Game:
         # Step 1: Predict the preferred task for each robot
         robot_predictions = {}
         for robot in unassigned_robots:
+            print("Robot with ID and position:", robot.id, robot.position)
             predicted_task_index = predict_action(robot.position, task_positions)
 
             # Ensure the predicted index is valid
