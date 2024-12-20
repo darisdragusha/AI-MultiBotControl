@@ -268,7 +268,7 @@ class Game:
 
                 # Print successful bid message
                 print(f"Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}")
-                self.add_status_message(
+                self.add_status_message( 
                     f"Auction: Robot {robot.id} won P{task.priority} task with bid {bid_value:.2f}"
                 )
 
@@ -339,6 +339,7 @@ class Game:
 
             if robot.path:
                 next_pos = robot.path[0]
+                robot.position = next_pos
                 
                 # Check for collision
                 collision = False
