@@ -116,7 +116,7 @@ The system uses several sophisticated algorithms and techniques:
    - Path recalculation when blocked
 
 3. **Reinforcement Learning**:
-   - DQN for task allocation decisions
+   - DQN for optimizing task allocation 
    - Environment based on grid positions
    - Reward system based on distance optimization
 
