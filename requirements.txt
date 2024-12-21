@@ -1,5 +1,5 @@
 gym
 numpy
 stable-baselines3[extra]
-torch==2.1.0
+torch
 tensorflow
