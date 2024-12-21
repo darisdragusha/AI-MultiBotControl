@@ -20,9 +20,9 @@ BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 PURPLE = (128, 0, 128)
-robot_image = pygame.image.load('root/src/images/robot.png')  
+robot_image = pygame.image.load('src/images/robot.png')  
 robot_image = pygame.transform.scale(robot_image, (CELL_SIZE, CELL_SIZE))  
-obstacle_image = pygame.image.load('root/src/images/barrier.png')
+obstacle_image = pygame.image.load('src/images/barrier.png')
 obstacle_image = pygame.transform.scale(obstacle_image, (CELL_SIZE, CELL_SIZE))  
 
 # Simulation Parameters

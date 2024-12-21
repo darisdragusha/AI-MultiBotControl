@@ -316,6 +316,7 @@ class Game:
                         break
                 if path_invalid:
                     robot.path = []
+                    robot.replan_count += 1  # Increment replan counter
                     self.add_status_message(f"Robot {robot.id}: Replanning due to obstacle")
 
             if not robot.path:
@@ -336,7 +337,7 @@ class Game:
                         # If no path found, clear target, add task in the list again and try another task
                         self.tasks.append(Task(robot.target.x, robot.target.y, robot.target.priority))
                         robot.target = None
-                        
+                        robot.replan_count += 1  # Increment replan counter
                         continue
                     robot.path.pop(0)  # Remove current position
 
@@ -353,6 +354,7 @@ class Game:
                         if (other_robot.x, other_robot.y) == next_pos:
                             collision = True
                             colliding_robot = other_robot
+                            robot.wait_count += 1  # Increment wait counter
                             break
                         # Check if other robot is planning to move to our next position
                         elif (other_robot.path and 
@@ -362,12 +364,14 @@ class Game:
                                 if robot.target.priority < other_robot.target.priority:
                                     collision = True
                                     colliding_robot = other_robot
+                                    robot.wait_count += 1  # Increment wait counter
                                     break
                                 elif robot.target.priority == other_robot.target.priority:
                                     # If same priority, consider waiting time and distance
                                     if robot.waiting_time < other_robot.waiting_time:
                                         collision = True
                                         colliding_robot = other_robot
+                                        robot.wait_count += 1  # Increment wait counter
                                         break
                                     elif robot.waiting_time == other_robot.waiting_time:
                                         # If same waiting time, let robot closer to target proceed
@@ -376,6 +380,7 @@ class Game:
                                             robot.manhattan_distance((robot.x, robot.y), robot.target.get_position())):
                                             collision = True
                                             colliding_robot = other_robot
+                                            robot.wait_count += 1  # Increment wait counter
                                             break
 
                 if not collision:
@@ -470,6 +475,32 @@ class Game:
         # Draw buttons
         for button in self.buttons.values():
             button.draw(self.screen)
+            
+        # Draw real-time metrics on the right side below menu buttons
+        if self.simulation_running:
+            font = pygame.font.Font(None, 24)
+            metrics_y = 350  # Start below the last button
+            
+            # Calculate metrics using PerformanceMetrics class
+            current_metrics = PerformanceMetrics.calculate_metrics(self)
+            formatted_metrics = PerformanceMetrics.format_metrics(current_metrics)
+            
+            # Draw metrics panel title
+            title = font.render("Performance Metrics:", True, BLACK)
+            self.screen.blit(title, (TOTAL_WIDTH - MENU_WIDTH + 20, metrics_y))
+            metrics_y += 30
+            
+            # Draw metrics panel background
+            metrics_panel = pygame.Rect(TOTAL_WIDTH - MENU_WIDTH + 10, metrics_y - 10, 
+                                      MENU_WIDTH - 20, 250)  # Increased height for more metrics
+            pygame.draw.rect(self.screen, (240, 240, 240), metrics_panel, border_radius=5)
+            pygame.draw.rect(self.screen, BLACK, metrics_panel, 2, border_radius=5)
+            
+            # Draw formatted metrics text
+            for metric in formatted_metrics:
+                text_surface = font.render(metric, True, BLACK)
+                self.screen.blit(text_surface, (TOTAL_WIDTH - MENU_WIDTH + 20, metrics_y))
+                metrics_y += 25
         
         
         

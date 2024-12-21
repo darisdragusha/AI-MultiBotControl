@@ -42,6 +42,8 @@ class Robot:
         self.id = id
         self.last_action = None
         self.last_state = None
+        self.replan_count = 0  # Counter for path replanning
+        self.wait_count = 0    # Counter for collision waits
 
     def set_target(self, task):
         self.target = task

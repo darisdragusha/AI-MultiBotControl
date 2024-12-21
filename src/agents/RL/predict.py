@@ -17,7 +17,7 @@ def predict_action(agent_position, task_positions):
     # Load the trained model
 
 # Define the absolute path to your model file
-    model_path = os.path.join(os.getcwd(), "root", "src", "agents", "RL", "auction_bid_model.zip")
+    model_path = os.path.join(os.getcwd(), "src", "agents", "RL", "auction_bid_model.zip")
 
 # Load the model
     model = DQN.load(model_path)
