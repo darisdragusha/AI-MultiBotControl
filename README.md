@@ -124,3 +124,14 @@ The system uses several sophisticated algorithms and techniques:
    - Time measurement
    - Task completion monitoring
    - Distance efficiency calculation
+  
+## Future Work
+
+Group Tasks:  
+- Implement tasks that require collaboration among multiple robots, enabling shared effort and parallel contribution to complete complex objectives.
+
+Multi-Task Assignment:  
+- Allow robots to handle multiple tasks simultaneously, optimizing efficiency and adaptability in dynamic environments.
+
+Weighted Grid Navigation:  
+- Introduce cell-specific weights to represent difficulty or ease of traversal, such as terrain types or environmental challenges, for more realistic path planning.
