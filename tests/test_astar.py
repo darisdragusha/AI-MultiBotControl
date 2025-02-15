@@ -52,6 +52,30 @@ class TestAStarPathfinding(unittest.TestCase):
         result = astar.find_path(start, goal)
         self.assertTrue(result in expected_paths)
 
+    def test_astar_edge_case_equal_length_paths(self):
+        """Test a case with two equally short paths in a 10x10 grid."""
+        grid = [[0] * 10 for _ in range(10)]
+        grid[4][5] = CellType.OBSTACLE  # Add an obstacle to create a decision point
+        game = MockGame(grid)
+        astar = AStar(game)
+        start = (0, 0)
+        goal = (9, 9)
+
+        # Two possible paths (both of equal length)
+        path1 = [
+            (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8), (0, 9),
+            (1, 9), (2, 9), (3, 9), (4, 9), (5, 9), (6, 9), (7, 9), (8, 9), (9, 9)
+        ]
+        path2 = [
+            (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0),
+            (9, 1), (9, 2), (9, 3), (9, 4), (9, 5), (9, 6), (9, 7), (9, 8), (9, 9)
+        ]
+
+        expected_paths = [path1, path2]
+        result = astar.find_path(start, goal)
+        self.assertIn(result, expected_paths)
+
     
+
 if __name__ == '__main__':
     unittest.main()
