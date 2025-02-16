@@ -75,7 +75,21 @@ class TestAStarPathfinding(unittest.TestCase):
         result = astar.find_path(start, goal)
         self.assertIn(result, expected_paths)
 
-    
+    def test_astar_error_case_no_path(self):
+        """Test a case where the goal is completely blocked off."""
+        grid = [[0] * 10 for _ in range(10)]
+        # Completely block the row just before the goal
+        for i in range(10):
+            grid[8][i] = CellType.OBSTACLE
+
+        game = MockGame(grid)
+        astar = AStar(game)
+        start = (0, 0)
+        goal = (9, 9)
+
+        result = astar.find_path(start, goal)
+        self.assertEqual(result, [])  # Expect an empty path since the goal is unreachable
+
 
 if __name__ == '__main__':
     unittest.main()
