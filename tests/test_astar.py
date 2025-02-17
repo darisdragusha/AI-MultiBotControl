@@ -91,5 +91,18 @@ class TestAStarPathfinding(unittest.TestCase):
         self.assertEqual(result, [])  # Expect an empty path since the goal is unreachable
 
 
+    def test_astar_same_start_and_goal_case(self):
+            """Test the algorithm when the start and goal are at the same place"""
+            grid = [[0] * 10 for _ in range(10)]  # 10x10 clear grid
+            game = MockGame(grid)
+            astar = AStar(game)
+            start = (4, 4)
+            goal = (4, 4)
+
+            # Expected path is empty (robot doesnt have to move)
+            expected_path = []
+            
+            result = astar.find_path(start, goal)
+            self.assertEqual(result, expected_path)
 if __name__ == '__main__':
     unittest.main()
