@@ -16,4 +16,12 @@ class TestAStarHeuristic(unittest.TestCase):
         result = self.astar.heuristic(start, goal)
         self.assertEqual(result, expected_distance)
 
+    def test_heuristic_edge_case_same_start_and_goal(self):
+        """Test heuristic where start and goal are the same point."""
+        start = (2, 2)
+        goal = (2, 2)
+        expected_distance = 0  # No distance to cover
+        result = self.astar.heuristic(start, goal)
+        self.assertEqual(result, expected_distance)
+
     
