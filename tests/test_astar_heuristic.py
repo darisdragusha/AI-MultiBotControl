@@ -24,4 +24,10 @@ class TestAStarHeuristic(unittest.TestCase):
         result = self.astar.heuristic(start, goal)
         self.assertEqual(result, expected_distance)
 
-    
+    def test_heuristic_failing_case(self):
+        """Deliberately fail with an incorrect expected distance for educational purposes."""
+        start = (1, 1)
+        goal = (4, 5)
+        incorrect_expected_distance = 6  # Incorrect on purpose (actual should be 7)
+        result = self.astar.heuristic(start, goal)
+        self.assertNotEqual(result, incorrect_expected_distance)  # We expect failure here
